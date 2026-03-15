@@ -1,7 +1,4 @@
-"""
-Data Ingestion Module
-Handles uploading NGSIM data to Azure Blob Storage via batch ingestion.
-"""
+# ingestion module - loads ngsim data from local file or azure blob storage
 
 import os
 import pandas as pd
@@ -9,15 +6,15 @@ from azure.storage.blob import BlobServiceClient, ContainerClient
 import config
 
 
+# connect to azure blob storage using the connection string from .env
 def connect_blob_storage() -> BlobServiceClient:
-    """Establish connection to Azure Blob Storage."""
     if not config.AZURE_STORAGE_CONNECTION_STRING:
         raise ValueError("AZURE_STORAGE_CONNECTION_STRING not set in environment.")
     return BlobServiceClient.from_connection_string(config.AZURE_STORAGE_CONNECTION_STRING)
 
 
+# create a blob container if it doesnt exist yet
 def ensure_container(blob_service: BlobServiceClient, container_name: str) -> ContainerClient:
-    """Create the blob container if it doesn't exist."""
     container_client = blob_service.get_container_client(container_name)
     try:
         container_client.get_container_properties()
@@ -28,11 +25,8 @@ def ensure_container(blob_service: BlobServiceClient, container_name: str) -> Co
     return container_client
 
 
+# upload the raw csv file to azure ngsim-raw container
 def upload_raw_data(blob_service: BlobServiceClient, local_file_path: str) -> str:
-    """
-    Upload raw NGSIM CSV data to Azure Blob Storage (batch ingestion).
-    Returns the blob name of the uploaded file.
-    """
     container_client = ensure_container(blob_service, config.AZURE_CONTAINER_RAW)
     blob_name = os.path.basename(local_file_path)
     blob_client = container_client.get_blob_client(blob_name)
@@ -47,10 +41,8 @@ def upload_raw_data(blob_service: BlobServiceClient, local_file_path: str) -> st
     return blob_name
 
 
+# download the csv back from azure and load it into a dataframe
 def download_raw_data(blob_service: BlobServiceClient, blob_name: str) -> pd.DataFrame:
-    """
-    Download raw NGSIM data from Azure Blob Storage and return as DataFrame.
-    """
     container_client = blob_service.get_container_client(config.AZURE_CONTAINER_RAW)
     blob_client = container_client.get_blob_client(blob_name)
 
@@ -64,11 +56,9 @@ def download_raw_data(blob_service: BlobServiceClient, blob_name: str) -> pd.Dat
     return df
 
 
+# load ngsim data from a local csv file
+# reads the csv, fixes column names, filters to us-101, removes duplicates
 def load_ngsim_local(file_path: str) -> pd.DataFrame:
-    """
-    Load NGSIM data from a local file (CSV or space-delimited text).
-    Handles both the original 18-column format and the extended data.gov format.
-    """
     print(f"  Loading local file: {file_path}")
 
     if file_path.endswith(".csv"):
@@ -81,17 +71,17 @@ def load_ngsim_local(file_path: str) -> pd.DataFrame:
     else:
         df = pd.read_csv(file_path, sep=r"\s+", header=None, names=config.NGSIM_COLUMNS)
 
-    # Handle the extended data.gov column format (has extra columns)
+    # fix column names from the data.gov format to our standard
     df = _normalize_columns(df)
 
-    # Filter to US-101 data if Location column exists
+    # filter to only us-101 data if the dataset has multiple freeways
     if "Location" in df.columns:
         before = len(df)
         df = df[df["Location"].str.contains("us-101", case=False, na=False)].copy()
         print(f"  Filtered to US-101 records: {len(df)} (from {before})")
         df = df.drop(columns=["Location"], errors="ignore")
 
-    # Drop duplicate rows
+    # remove duplicate rows
     before = len(df)
     df = df.drop_duplicates()
     if len(df) < before:
@@ -104,8 +94,9 @@ def load_ngsim_local(file_path: str) -> pd.DataFrame:
     return df
 
 
+# fix column names - data.gov uses different names than standard ngsim
+# like Space_Headway instead of Space_Hdwy, v_vel instead of v_Vel
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Map various NGSIM column naming conventions to our standard names."""
     column_map = {
         "v_length": "v_Length",
         "v_width": "v_Width",
@@ -117,15 +108,16 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     }
     df = df.rename(columns=column_map)
 
-    # Drop extra columns from the extended format that we don't need
+    # drop extra columns from the data.gov format that we dont need
     extra_cols = ["O_Zone", "D_Zone", "Int_ID", "Section_ID", "Direction", "Movement"]
     df = df.drop(columns=[c for c in extra_cols if c in df.columns], errors="ignore")
 
     return df
 
 
+# same as load_ngsim_local but reads from a string instead of a file
+# used when downloading from azure
 def load_ngsim_data_from_string(data_str: str) -> pd.DataFrame:
-    """Parse NGSIM data from a string."""
     from io import StringIO
     try:
         df = pd.read_csv(StringIO(data_str))
@@ -134,10 +126,8 @@ def load_ngsim_data_from_string(data_str: str) -> pd.DataFrame:
     except Exception:
         df = pd.read_csv(StringIO(data_str), sep=r"\s+", header=None, names=config.NGSIM_COLUMNS)
 
-    # Normalize columns (same as local loading)
     df = _normalize_columns(df)
 
-    # Filter to US-101 if Location column exists
     if "Location" in df.columns:
         df = df[df["Location"].str.contains("us-101", case=False, na=False)].copy()
         df = df.drop(columns=["Location"], errors="ignore")

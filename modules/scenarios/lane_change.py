@@ -1,30 +1,17 @@
-"""
-Lane Change Scenario Detection Module
-
-Definition:
-  A lane change scenario occurs when a vehicle transitions from one lane
-  to an adjacent lane within a 5-second window. The ego vehicle's Lane_ID
-  changes during the observation period, indicating a lateral maneuver.
-
-Observable conditions:
-  - The ego vehicle's Lane_ID value changes at least once during the window
-  - The change is between adjacent mainline lanes (difference of 1)
-  - Surrounding vehicles in both the source and destination lanes are tracked
-    to provide full context for the maneuver
-"""
+# lane change detector
+# finds when a car moves from one lane to the lane next to it
+# uses a sliding window of 50 records (5 seconds) per vehicle
 
 import pandas as pd
 import numpy as np
 import config
 
 
+# main function - scan all vehicles and find lane change scenarios
+# checks: lane id changes, lanes are adjacent (diff of 1), both lanes are mainline
 def detect_lane_change(df: pd.DataFrame) -> list:
-    """
-    Detect lane change scenarios across all vehicles.
-    Uses record-based windowing to handle non-consecutive frame IDs.
-    """
     scenarios = []
-    window = config.FRAMES_PER_WINDOW
+    window = config.FRAMES_PER_WINDOW  # 50 records = 5 seconds at 10hz
     vehicle_ids = df["Vehicle_ID"].unique()
 
     for ego_id in vehicle_ids:
@@ -33,6 +20,7 @@ def detect_lane_change(df: pd.DataFrame) -> list:
         if len(ego_data) < window:
             continue
 
+        # slide a window of 50 records across this vehicles data
         i = 0
         while i <= len(ego_data) - window:
             ego_window = ego_data.iloc[i:i + window]
@@ -40,7 +28,7 @@ def detect_lane_change(df: pd.DataFrame) -> list:
             start_frame = ego_window["Frame_ID"].iloc[0]
             end_frame = ego_window["Frame_ID"].iloc[-1]
 
-            # Check if lane changes during the window
+            # check 1: does the lane id change during this window?
             lanes_in_window = ego_window["Lane_ID"].values
             unique_lanes = np.unique(lanes_in_window)
 
@@ -48,7 +36,7 @@ def detect_lane_change(df: pd.DataFrame) -> list:
                 i += window // 5
                 continue
 
-            # Find the actual lane transition
+            # find the exact point where the lane changes
             lane_changes = np.where(np.diff(lanes_in_window) != 0)[0]
             if len(lane_changes) == 0:
                 i += window // 5
@@ -58,23 +46,25 @@ def detect_lane_change(df: pd.DataFrame) -> list:
             source_lane = int(lanes_in_window[change_idx])
             dest_lane = int(lanes_in_window[change_idx + 1])
 
-            # Verify it's an adjacent lane change
+            # check 2: lanes must be adjacent (difference of 1, like lane 2 to lane 3)
             if abs(dest_lane - source_lane) != 1:
                 i += window // 5
                 continue
 
-            # Both lanes must be mainline
+            # check 3: both lanes have to be mainline lanes 1-5 (no ramps)
             if source_lane not in config.LC_LANE_MAINLINE or dest_lane not in config.LC_LANE_MAINLINE:
                 i += window // 5
                 continue
 
+            # all checks passed - this is a lane change
             change_frame = int(ego_window["Frame_ID"].iloc[change_idx])
 
-            # Get surrounding vehicles in BOTH source and destination lanes
+            # find nearby vehicles in both the source and destination lanes
             surrounding = _get_surrounding_both_lanes(
                 df, ego_id, source_lane, dest_lane, ego_window, start_frame, end_frame
             )
 
+            # save the scenario with all the details
             scenario = {
                 "scenario_type": "lane_change",
                 "ego_vehicle_id": int(ego_id),
@@ -99,8 +89,8 @@ def detect_lane_change(df: pd.DataFrame) -> list:
     return scenarios
 
 
+# find nearby vehicles in both the source and destination lanes
 def _get_surrounding_both_lanes(df, ego_id, source_lane, dest_lane, ego_window, start_frame, end_frame):
-    """Find surrounding vehicles in both the source and destination lanes."""
     ego_y_mean = ego_window["Local_Y"].mean()
     lanes_to_check = set()
     for lane in [source_lane, dest_lane]:
@@ -120,8 +110,8 @@ def _get_surrounding_both_lanes(df, ego_id, source_lane, dest_lane, ego_window, 
     return sorted(df[surrounding_mask]["Vehicle_ID"].unique().tolist())
 
 
+# grab a few data points from the vehicles trajectory for the output
 def _extract_trajectory(vehicle_data):
-    """Extract compact trajectory for output."""
     data = vehicle_data.reset_index(drop=True)
     sampled = data.iloc[::10] if len(data) > 10 else data
     trajectory = []

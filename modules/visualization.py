@@ -1,31 +1,28 @@
-"""
-Visualization Module
-Generates plots to visually verify detected scenarios are correct.
-Produces PNG charts saved to the output directory.
-"""
+# visualization module - makes charts to verify the detected scenarios are correct
+# generates 6 png charts saved to the output folder
 
 import os
 import json
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")  # Non-interactive backend for saving files
+matplotlib.use("Agg")  # dont show windows, just save files
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import config
 
 
+# generate all 6 visualizations
 def visualize_all(df: pd.DataFrame, scenarios: list, output_dir: str):
-    """Generate all visualizations for the detected scenarios."""
     viz_dir = os.path.join(output_dir, "visualizations")
     os.makedirs(viz_dir, exist_ok=True)
 
     print("  Generating scenario visualizations...")
 
-    # 1. Summary bar chart
+    # bar chart showing total count of each type
     plot_summary(scenarios, viz_dir)
 
-    # 2. One example of each scenario type
+    # one example chart for each scenario type to prove they work
     cf = [s for s in scenarios if s["scenario_type"] == "car_following"]
     sg = [s for s in scenarios if s["scenario_type"] == "stop_and_go"]
     lc = [s for s in scenarios if s["scenario_type"] == "lane_change"]
@@ -37,18 +34,18 @@ def visualize_all(df: pd.DataFrame, scenarios: list, output_dir: str):
     if lc:
         plot_lane_change(df, lc[0], viz_dir)
 
-    # 3. Scenario distribution across lanes
+    # which lanes had the most scenarios
     plot_lane_distribution(scenarios, viz_dir)
 
-    # 4. Speed distribution by scenario type
+    # speed comparison across scenario types
     plot_speed_distributions(scenarios, viz_dir)
 
     count = len([f for f in os.listdir(viz_dir) if f.endswith(".png")])
     print(f"  {count} visualizations saved to: {viz_dir}/")
 
 
+# bar chart - how many of each scenario type were detected
 def plot_summary(scenarios, viz_dir):
-    """Bar chart showing count of each scenario type."""
     cf_count = sum(1 for s in scenarios if s["scenario_type"] == "car_following")
     sg_count = sum(1 for s in scenarios if s["scenario_type"] == "stop_and_go")
     lc_count = sum(1 for s in scenarios if s["scenario_type"] == "lane_change")
@@ -79,11 +76,8 @@ def plot_summary(scenarios, viz_dir):
     plt.close()
 
 
+# plot one car-following example - shows both vehicles speeds should be similar
 def plot_car_following(df, scenario, viz_dir):
-    """
-    Plot ego and lead vehicle speeds over time to verify car-following.
-    A correct car-following scenario shows two vehicles with similar speeds.
-    """
     ego_id = scenario["ego_vehicle_id"]
     lead_id = scenario["lead_vehicle_id"]
     start = scenario["start_frame"]
@@ -97,7 +91,7 @@ def plot_car_following(df, scenario, viz_dir):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=False)
     fig.suptitle(f"Car-Following Verification - {scenario['scenario_id']}", fontsize=14, fontweight="bold")
 
-    # Speed comparison
+    # top: speed comparison
     ax1.plot(range(len(ego_data)), ego_data["v_Vel"].values, "b-", linewidth=2, label=f"Ego (Vehicle {ego_id})")
     ax1.plot(range(len(lead_data)), lead_data["v_Vel"].values, "r--", linewidth=2, label=f"Lead (Vehicle {lead_id})")
     ax1.set_ylabel("Speed (ft/s)", fontsize=11)
@@ -105,7 +99,7 @@ def plot_car_following(df, scenario, viz_dir):
     ax1.legend(fontsize=10)
     ax1.grid(True, alpha=0.3)
 
-    # Space headway over time
+    # bottom: gap between vehicles
     if "Space_Hdwy" in ego_data.columns:
         hdwy = ego_data["Space_Hdwy"].values
         ax2.plot(range(len(ego_data)), hdwy, "g-", linewidth=2, label="Space Headway")
@@ -121,11 +115,8 @@ def plot_car_following(df, scenario, viz_dir):
     plt.close()
 
 
+# plot one stop-and-go example - shows speed dropping and acceleration pattern
 def plot_stop_and_go(df, scenario, viz_dir):
-    """
-    Plot speed and acceleration over time to verify stop-and-go.
-    A correct stop-and-go shows: deceleration -> low speed -> acceleration.
-    """
     ego_id = scenario["ego_vehicle_id"]
     start = scenario["start_frame"]
     end = scenario["end_frame"]
@@ -138,7 +129,7 @@ def plot_stop_and_go(df, scenario, viz_dir):
 
     x = range(len(ego_data))
 
-    # Speed over time
+    # top: speed over time - should drop below threshold
     ax1.plot(x, ego_data["v_Vel"].values, "b-", linewidth=2, label=f"Vehicle {ego_id}")
     ax1.axhline(y=config.SG_LOW_SPEED_THRESHOLD_FT_S, color="red", linestyle=":",
                 label=f"Low speed threshold ({config.SG_LOW_SPEED_THRESHOLD_FT_S} ft/s)")
@@ -148,7 +139,7 @@ def plot_stop_and_go(df, scenario, viz_dir):
     ax1.legend(fontsize=10)
     ax1.grid(True, alpha=0.3)
 
-    # Acceleration over time
+    # bottom: acceleration - red bars = braking, green bars = speeding up
     acc = ego_data["v_Acc"].values
     colors = ["red" if a < config.SG_DECEL_THRESHOLD_FT_S2 else
               "green" if a > config.SG_ACCEL_THRESHOLD_FT_S2 else "gray" for a in acc]
@@ -168,11 +159,8 @@ def plot_stop_and_go(df, scenario, viz_dir):
     plt.close()
 
 
+# plot one lane change example - shows lane id changing and lateral position shifting
 def plot_lane_change(df, scenario, viz_dir):
-    """
-    Plot lane position and lateral position over time to verify lane change.
-    A correct lane change shows the Lane_ID changing from source to destination.
-    """
     ego_id = scenario["ego_vehicle_id"]
     start = scenario["start_frame"]
     end = scenario["end_frame"]
@@ -185,27 +173,26 @@ def plot_lane_change(df, scenario, viz_dir):
 
     x = range(len(ego_data))
 
-    # Lane ID over time
+    # top: lane id over time - should change from source to destination
     ax1.plot(x, ego_data["Lane_ID"].values, "b-o", linewidth=2, markersize=3)
     ax1.set_ylabel("Lane ID", fontsize=11)
     ax1.set_yticks(range(1, 6))
     ax1.set_title(f"Lane ID (change from {scenario['source_lane']} to {scenario['destination_lane']} = correct lane change)", fontsize=11)
     ax1.grid(True, alpha=0.3)
 
-    # Mark source and destination
     src = scenario["source_lane"]
     dst = scenario["destination_lane"]
     ax1.axhline(y=src, color="blue", linestyle=":", alpha=0.5, label=f"Source: Lane {src}")
     ax1.axhline(y=dst, color="red", linestyle=":", alpha=0.5, label=f"Dest: Lane {dst}")
     ax1.legend(fontsize=9)
 
-    # Lateral position (Local_X) over time
+    # middle: lateral position - should shift sideways
     ax2.plot(x, ego_data["Local_X"].values, "g-", linewidth=2)
     ax2.set_ylabel("Lateral Position (ft)", fontsize=11)
     ax2.set_title("Lateral Position (shift confirms physical lane change)", fontsize=11)
     ax2.grid(True, alpha=0.3)
 
-    # Speed over time
+    # bottom: speed during the lane change
     ax3.plot(x, ego_data["v_Vel"].values, "orange", linewidth=2)
     ax3.set_ylabel("Speed (ft/s)", fontsize=11)
     ax3.set_xlabel("Record Index (within 5-second window)", fontsize=11)
@@ -217,8 +204,8 @@ def plot_lane_change(df, scenario, viz_dir):
     plt.close()
 
 
+# bar chart - how many scenarios in each lane
 def plot_lane_distribution(scenarios, viz_dir):
-    """Bar chart showing how many scenarios were detected in each lane."""
     lane_counts = {}
     for s in scenarios:
         lane = s.get("ego_lane", 0)
@@ -253,8 +240,8 @@ def plot_lane_distribution(scenarios, viz_dir):
     plt.close()
 
 
+# box plot - comparing speeds across scenario types
 def plot_speed_distributions(scenarios, viz_dir):
-    """Box plot of ego vehicle speeds across scenario types."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
     data = {"Car-Following": [], "Stop-and-Go": [], "Lane Change": []}

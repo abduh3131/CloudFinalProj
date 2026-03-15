@@ -1,7 +1,4 @@
-"""
-Output Module
-Generates final labeled 5-second scenario samples and formats results.
-"""
+# output module - formats detected scenarios and prints results
 
 import json
 import os
@@ -9,10 +6,9 @@ import pandas as pd
 import config
 
 
+# combine all scenarios, give each one a unique id, sort by time
+# car-following gets CF-0001, stop-and-go gets SG-0001, lane change gets LC-0001
 def format_scenarios(car_following: list, stop_and_go: list, lane_change: list) -> list:
-    """
-    Combine all detected scenarios, assign unique IDs, and format for output.
-    """
     all_scenarios = []
     scenario_id = 1
 
@@ -31,14 +27,14 @@ def format_scenarios(car_following: list, stop_and_go: list, lane_change: list) 
         all_scenarios.append(s)
         scenario_id += 1
 
-    # Sort by start frame
+    # sort all scenarios by when they happened
     all_scenarios.sort(key=lambda x: x["start_frame"])
 
     return all_scenarios
 
 
+# print a summary of how many of each type were detected
 def print_summary(scenarios: list):
-    """Print a summary of detected scenarios."""
     cf_count = sum(1 for s in scenarios if s["scenario_type"] == "car_following")
     sg_count = sum(1 for s in scenarios if s["scenario_type"] == "stop_and_go")
     lc_count = sum(1 for s in scenarios if s["scenario_type"] == "lane_change")
@@ -53,8 +49,8 @@ def print_summary(scenarios: list):
     print("=" * 60)
 
 
+# print a few example scenarios so you can see what the output looks like
 def print_example_outputs(scenarios: list, max_examples: int = 2):
-    """Print example scenario outputs for documentation purposes."""
     print("\n" + "=" * 60)
     print("EXAMPLE OUTPUTS")
     print("=" * 60)
@@ -99,7 +95,6 @@ def print_example_outputs(scenarios: list, max_examples: int = 2):
             print(f"  Surrounding Vehicles ({len(s.get('surrounding_vehicles', []))}): "
                   f"{s.get('surrounding_vehicles', [])[:10]}")
 
-            # Show a few trajectory points
             traj = s.get("ego_trajectory", [])
             if traj:
                 print(f"  Ego Trajectory Sample (per second):")

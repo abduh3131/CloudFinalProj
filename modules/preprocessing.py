@@ -1,43 +1,33 @@
-"""
-Preprocessing Module
-Cleans and prepares NGSIM data for scenario detection.
-"""
+# preprocessing module - cleans raw ngsim data before scenario detection
 
 import pandas as pd
 import numpy as np
 import config
 
 
+# main preprocessing function
+# filters to mainline lanes, removes bad data, computes extra features
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Full preprocessing pipeline for NGSIM data.
-    Steps:
-      1. Validate and clean columns
-      2. Filter to mainline lanes
-      3. Sort by Vehicle_ID and Frame_ID
-      4. Remove invalid records
-      5. Compute derived features
-    """
     print("  Preprocessing NGSIM data...")
     original_count = len(df)
 
-    # Ensure correct column types
+    # make sure columns have the right data types
     df = enforce_types(df)
 
-    # Remove records with missing critical fields
+    # remove rows that are missing important fields
     df = df.dropna(subset=["Vehicle_ID", "Frame_ID", "Local_X", "Local_Y", "v_Vel", "Lane_ID"])
 
-    # Filter to mainline lanes only (1-5 for US-101)
+    # only keep mainline lanes 1-5 (removes ramps and auxiliary lanes)
     df = df[df["Lane_ID"].isin(config.LC_LANE_MAINLINE)].copy()
 
-    # Remove records with unrealistic values
-    df = df[df["v_Vel"] >= 0].copy()  # No negative velocities
-    df = df[df["v_Acc"].abs() < 40].copy()  # Filter extreme acceleration (>40 ft/s^2)
+    # remove bad sensor data - no negative speeds, no crazy acceleration
+    df = df[df["v_Vel"] >= 0].copy()
+    df = df[df["v_Acc"].abs() < 40].copy()  # over 40 ft/s^2 is a sensor error
 
-    # Sort for consistent processing
+    # sort by vehicle and frame so everything is in order
     df = df.sort_values(["Vehicle_ID", "Frame_ID"]).reset_index(drop=True)
 
-    # Compute derived features
+    # add extra useful columns
     df = compute_derived_features(df)
 
     removed = original_count - len(df)
@@ -46,8 +36,8 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# make sure vehicle_id and frame_id are ints, speeds and positions are floats
 def enforce_types(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure correct data types for all columns."""
     int_cols = ["Vehicle_ID", "Frame_ID", "Total_Frames", "v_Class", "Lane_ID", "Preceding", "Following"]
     float_cols = ["Global_Time", "Local_X", "Local_Y", "Global_X", "Global_Y",
                   "v_Length", "v_Width", "v_Vel", "v_Acc", "Space_Hdwy", "Time_Hdwy"]
@@ -61,16 +51,16 @@ def enforce_types(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# add extra columns - speed in mph, relative time, how many frames each vehicle has
 def compute_derived_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute additional features useful for scenario detection."""
-    # Relative time in seconds from the start of the dataset
+    # relative time in seconds from the start of the dataset
     min_time = df["Global_Time"].min()
     df["Relative_Time_s"] = (df["Global_Time"] - min_time) / 1000.0
 
-    # Speed in mph for readability (1 ft/s = 0.681818 mph)
+    # convert speed from ft/s to mph for readability
     df["Speed_mph"] = df["v_Vel"] * 0.681818
 
-    # Flag for each vehicle: number of frames it appears
+    # count how many frames each vehicle appears in
     vehicle_frame_counts = df.groupby("Vehicle_ID")["Frame_ID"].transform("count")
     df["Vehicle_Frame_Count"] = vehicle_frame_counts
 

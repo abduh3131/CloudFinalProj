@@ -1,30 +1,19 @@
-"""
-NGSIM Scenario Extraction System - Phase 1: Modular Monolithic Application
-
-This is the main orchestrator that coordinates all modules in the processing pipeline:
-  1. Data Ingestion  - Load/upload NGSIM data to Azure Blob Storage
-  2. Data Storage    - Manage data in Azure Blob Storage
-  3. Preprocessing   - Clean and prepare the data
-  4. Scenario Detection - Identify car-following, stop-and-go, and lane change scenarios
-  5. Output Generation  - Produce labeled 5-second scenario samples
-
-Usage:
-  python main.py                           # Process with local data
-  python main.py --azure                   # Use Azure Blob Storage
-  python main.py --data path/to/data.csv   # Specify data file
-  python main.py --generate-sample         # Generate sample data for testing
-"""
-
 import sys
 import os
 import argparse
 import time
 
-# Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
-from modules.ingestion import load_ngsim_local, connect_blob_storage, upload_raw_data, download_raw_data
+
+# import all the modules
+from modules.ingestion import (
+    load_ngsim_local,
+    connect_blob_storage,
+    upload_raw_data,
+    download_raw_data,
+)
 from modules.preprocessing import preprocess
 from modules.scenarios.car_following import detect_car_following
 from modules.scenarios.stop_and_go import detect_stop_and_go
@@ -34,25 +23,41 @@ from modules.storage import save_output_local, save_output_csv, upload_scenarios
 from modules.visualization import visualize_all
 
 
+# handle command line arguments like --data, --azure, --generate-sample
 def parse_args():
-    parser = argparse.ArgumentParser(description="NGSIM Scenario Extraction - Phase 1 Monolithic System")
-    parser.add_argument("--data", type=str, default=config.NGSIM_DATA_PATH,
-                        help="Path to NGSIM data file (CSV or TXT)")
-    parser.add_argument("--azure", action="store_true",
-                        help="Enable Azure Blob Storage integration")
-    parser.add_argument("--generate-sample", action="store_true",
-                        help="Generate sample NGSIM data for testing")
-    parser.add_argument("--output-dir", type=str, default=config.OUTPUT_DIR,
-                        help="Directory for output files")
+    parser = argparse.ArgumentParser(
+        description="NGSIM Scenario Extraction - Phase 1 Monolithic System"
+    )
+    parser.add_argument(
+        "--data",
+        type=str,
+        default=config.NGSIM_DATA_PATH,
+        help="Path to NGSIM data file (CSV or TXT)",
+    )
+    parser.add_argument(
+        "--azure", action="store_true", help="Enable Azure Blob Storage integration"
+    )
+    parser.add_argument(
+        "--generate-sample",
+        action="store_true",
+        help="Generate sample NGSIM data for testing",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=config.OUTPUT_DIR,
+        help="Directory for output files",
+    )
     return parser.parse_args()
 
 
 def generate_sample_data(output_path: str):
-    """Generate realistic sample NGSIM data for testing."""
     from generate_sample import generate_sample_ngsim
+
     generate_sample_ngsim(output_path)
 
 
+# main pipeline - runs all 5 steps
 def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -65,14 +70,14 @@ def main():
 
     start_time = time.time()
 
-    # Step 0: Generate sample data if requested
+    # generate sample data if requested
     if args.generate_sample:
         sample_path = os.path.join("data", "sample_ngsim.csv")
         os.makedirs("data", exist_ok=True)
         generate_sample_data(sample_path)
         args.data = sample_path
 
-    # Step 1: Data Ingestion
+    # step 1: load ngsim data (locally or from azure)
     print("\n[STEP 1] DATA INGESTION")
     print("-" * 40)
 
@@ -92,12 +97,12 @@ def main():
         print("  Running in local mode (use --azure for cloud integration).")
         df = load_ngsim_local(args.data)
 
-    # Step 2: Preprocessing
+    # step 2: clean the data - filter lanes, remove bad records
     print("\n[STEP 2] DATA PREPROCESSING")
     print("-" * 40)
     df = preprocess(df)
 
-    # Step 3: Scenario Detection
+    # step 3: run all 3 scenario detectors using sliding window
     print("\n[STEP 3] SCENARIO DETECTION")
     print("-" * 40)
 
@@ -113,30 +118,29 @@ def main():
     lc_scenarios = detect_lane_change(df)
     print(f"  Found {len(lc_scenarios)} lane change scenarios.")
 
-    # Step 4: Format and Output
+    # step 4: format results and save as json + csv, upload to azure
     print("\n[STEP 4] OUTPUT GENERATION")
     print("-" * 40)
     all_scenarios = format_scenarios(cf_scenarios, sg_scenarios, lc_scenarios)
 
-    # Save outputs
+    # save locally
     json_path = os.path.join(args.output_dir, "scenarios_output.json")
     csv_path = os.path.join(args.output_dir, "scenarios_summary.csv")
     save_output_local(all_scenarios, json_path)
     save_output_csv(all_scenarios, csv_path)
 
-    # Upload to Azure if enabled
+    # upload to azure if --azure flag was used
     if blob_service:
         try:
             upload_scenarios_json(blob_service, all_scenarios, "scenarios_output.json")
         except Exception as e:
             print(f"  Azure upload failed: {e}")
 
-    # Step 5: Visualization
+    # step 5: generate charts to verify scenarios are correct
     print("\n[STEP 5] VISUALIZATION")
     print("-" * 40)
     visualize_all(df, all_scenarios, args.output_dir)
 
-    # Print summary and examples
     print_summary(all_scenarios)
     print_example_outputs(all_scenarios)
 
