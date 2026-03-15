@@ -1,7 +1,3 @@
-# car-following detector
-# finds when one car is following another car in the same lane
-# uses a sliding window of 50 records (5 seconds) per vehicle
-
 import pandas as pd
 import numpy as np
 import config

@@ -7,7 +7,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
 
-# import all the modules
 from modules.ingestion import (
     load_ngsim_local,
     connect_blob_storage,

@@ -1,7 +1,3 @@
-# lane change detector
-# finds when a car moves from one lane to the lane next to it
-# uses a sliding window of 50 records (5 seconds) per vehicle
-
 import pandas as pd
 import numpy as np
 import config

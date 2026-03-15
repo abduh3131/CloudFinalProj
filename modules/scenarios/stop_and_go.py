@@ -1,8 +1,3 @@
-# stop-and-go detector
-# finds when a car brakes hard, almost stops, then speeds up again
-# this happens in congested traffic (shockwave jams)
-# uses a sliding window of 50 records (5 seconds) per vehicle
-
 import pandas as pd
 import numpy as np
 import config

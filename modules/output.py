@@ -1,5 +1,3 @@
-# output module - formats detected scenarios and prints results
-
 import json
 import os
 import pandas as pd

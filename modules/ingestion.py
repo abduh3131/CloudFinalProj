@@ -1,5 +1,3 @@
-# ingestion module - loads ngsim data from local file or azure blob storage
-
 import os
 import pandas as pd
 from azure.storage.blob import BlobServiceClient, ContainerClient

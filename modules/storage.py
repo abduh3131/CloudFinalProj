@@ -1,5 +1,3 @@
-# storage module - saves results locally and uploads to azure
-
 import json
 import math
 import numpy as np

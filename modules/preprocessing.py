@@ -1,5 +1,3 @@
-# preprocessing module - cleans raw ngsim data before scenario detection
-
 import pandas as pd
 import numpy as np
 import config

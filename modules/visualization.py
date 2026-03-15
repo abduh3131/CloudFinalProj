@@ -1,6 +1,3 @@
-# visualization module - makes charts to verify the detected scenarios are correct
-# generates 6 png charts saved to the output folder
-
 import os
 import json
 import pandas as pd
