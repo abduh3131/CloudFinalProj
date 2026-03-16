@@ -1,5 +1,0 @@
-.env
-node_modules/
-__pycache__/
-.~lock.*
-data/ngsim_us101.csv
